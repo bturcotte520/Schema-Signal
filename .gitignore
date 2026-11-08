@@ -8,3 +8,5 @@ runs/
 .env
 .env.*
 !.env.example
+private-inputs/
+.DS_Store

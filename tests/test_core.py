@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 from schema_signal.core import (
     API, Client, MAX_RESPONSE_BYTES, NoRedirect, Reply, analyze, make_request,
-    probe, scrub,
+    probe, scrub, check_schema,
 )
 
 
@@ -52,7 +52,7 @@ class AnalyzeTests(unittest.TestCase):
         self.assertEqual(result["status"], "schema_mismatch")
 
     def test_invalid_json_not_repaired(self):
-        for content in ('```json\n{}\n```', '{"item":"a","quantity":NaN}', '{"item":"a","quantity":1,"quantity":2}'):
+        for content in ('```json\n{}\n```', '{"item":"a","quantity":NaN}', '{"item":"a","quantity":1e999}', '{"item":"a","quantity":1,"quantity":2}'):
             with self.subTest(content=content):
                 result, _ = analyze(response(content))
                 self.assertEqual(result["status"], "invalid_json")
@@ -112,6 +112,8 @@ class AnalyzeTests(unittest.TestCase):
     def test_usage_is_allowlisted(self):
         result, _ = analyze(response(usage={"prompt_tokens": 12, "cost": 0.001, "secret": "SECRET", "completion_tokens": "SECRET"}))
         self.assertEqual(result["usage"], {"prompt_tokens": 12, "cost": 0.001})
+        result, _ = analyze(response(usage={"prompt_tokens": 10 ** 400}))
+        self.assertEqual(result["usage"], {})
 
     def test_scrub_recurses(self):
         value = {"outer": [{"a": "this is the-actual-key", "b": "Bearer another-secret", "c": "sk-or-v1-hidden"}]}
@@ -121,6 +123,29 @@ class AnalyzeTests(unittest.TestCase):
 
 
 class ProbeTests(unittest.TestCase):
+    def test_custom_schema_is_used_not_purchase_schema(self):
+        schema = {"type": "object", "properties": {"scores": {"type": "array", "items": {"type": "integer", "minimum": 2}}},
+                  "required": ["scores"], "additionalProperties": False}
+        check_schema(schema)
+        request = make_request("example/model", False, prompt="Synthetic scores", schema=schema)
+        client = Mock()
+        for content, expected in (('{"scores":[2,3]}', "valid"),
+                                  ('{"scores":[1]}', "schema_mismatch"),
+                                  ('{"item":"notebook","quantity":3}', "schema_mismatch")):
+            client.send.return_value = response(content)
+            result = probe(client, request)
+            self.assertEqual(result["status"], expected)
+            self.assertIn("started_at", result)
+        on = make_request("example/model", True, prompt="Synthetic scores", schema=schema)
+        on["provider"]["require_parameters"] = False
+        self.assertEqual(request, on)
+        self.assertTrue(request["response_format"]["json_schema"]["strict"])
+
+    def test_empty_custom_schema_is_not_replaced_by_default(self):
+        client = Mock()
+        client.send.return_value = response('42')
+        self.assertEqual(probe(client, make_request("example/model", True, schema={}))["status"], "valid")
+
     def test_provider_returned_no_lookup(self):
         client = Mock()
         client.send.return_value = response(id="gen-abc")
@@ -130,10 +155,11 @@ class ProbeTests(unittest.TestCase):
 
     def test_generation_metadata_fallback(self):
         client = Mock()
-        client.send.side_effect = [response(provider=None, id="gen-abc"), Reply(200, b'{"data":{"provider_name":"Metadata provider","secret":"NO"}}')]
+        client.send.side_effect = [response(provider=None, id="gen-abc"), Reply(200, b'{"data":{"provider_name":"Metadata provider","total_cost":0.001,"secret":"NO"}}')]
         result = probe(client, make_request("example/model", True))
         self.assertEqual(result["routing"]["provider"], "Metadata provider")
         self.assertEqual(result["routing"]["source"], "generation.data.provider_name")
+        self.assertEqual(result["usage"]["total_cost_usd"], 0.001)
         self.assertEqual(client.send.call_args.args[0], "/generation?id=gen-abc")
         self.assertNotIn("NO", json.dumps(result))
 

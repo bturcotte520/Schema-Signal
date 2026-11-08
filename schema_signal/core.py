@@ -11,9 +11,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, SchemaError
 
 API = "https://openrouter.ai/api/v1"
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -33,21 +34,22 @@ PROMPT = (
 
 
 def make_request(model: str, required: bool, provider: str | None = None,
-                 max_tokens: int = 256) -> dict:
+                 max_tokens: int = 256, prompt: str = PROMPT,
+                 schema: dict | None = None) -> dict:
     """The two requests differ in exactly one boolean."""
     preferences: dict[str, Any] = {"require_parameters": required}
     if provider:
         preferences.update(only=[provider], allow_fallbacks=False)
     return {
         "model": model,
-        "messages": [{"role": "user", "content": PROMPT}],
+        "messages": [{"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
         "stream": False,
         "provider": preferences,
         "response_format": {
             "type": "json_schema",
             "json_schema": {"name": "purchase", "strict": True,
-                            "schema": copy.deepcopy(SCHEMA)},
+                            "schema": copy.deepcopy(SCHEMA if schema is None else schema)},
         },
     }
 
@@ -64,8 +66,36 @@ def _no_duplicates(pairs):
 def strict_json(value: str | bytes):
     def reject_constant(_):
         raise ValueError("Non-finite JSON number")
+    def finite_float(value):
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("Non-finite JSON number")
+        return number
     return json.loads(value, parse_constant=reject_constant,
+                      parse_float=finite_float,
                       object_pairs_hook=_no_duplicates)
+
+
+def check_schema(schema: Any) -> None:
+    """Keep custom validation self-contained; never retrieve schema URLs."""
+    if not isinstance(schema, dict):
+        raise ValueError("Schema must be a JSON object")
+    def check_nodes(node):
+        if isinstance(node, dict):
+            if any(key in node for key in ("$ref", "$dynamicRef", "$recursiveRef")):
+                raise ValueError("Schema references are not supported; inline referenced schemas")
+            if "$schema" in node and node["$schema"] != "https://json-schema.org/draft/2020-12/schema":
+                raise ValueError("Only JSON Schema Draft 2020-12 is supported; omit $schema or use its canonical URI")
+            for value in node.values():
+                check_nodes(value)
+        elif isinstance(node, list):
+            for value in node:
+                check_nodes(value)
+    check_nodes(schema)
+    try:
+        Draft202012Validator.check_schema(schema)
+    except SchemaError:
+        raise ValueError("Invalid Draft 2020-12 schema; check keyword types and constraints (details omitted for privacy)") from None
 
 
 def scrub(value: Any, secret: str = "") -> Any:
@@ -90,7 +120,10 @@ def label(value: Any) -> str | None:
 
 
 def numeric(value: Any) -> bool:
-    return type(value) in (int, float) and math.isfinite(value)
+    try:
+        return type(value) in (int, float) and math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 @dataclass
@@ -148,7 +181,7 @@ class Client:
         return round((time.monotonic() - start) * 1000)
 
 
-def analyze(reply: Reply) -> tuple[dict, str | None]:
+def analyze(reply: Reply, schema: dict | None = None) -> tuple[dict, str | None]:
     """Return only allowlisted diagnostics, plus a private ID for metadata lookup."""
     result: dict[str, Any] = {
         "http_status": reply.status,
@@ -215,7 +248,7 @@ def analyze(reply: Reply) -> tuple[dict, str | None]:
         result["status"] = "truncated" if reason == "length" else "invalid_json"
         return result, generation_id
     result["validation"]["json_valid"] = True
-    failures = list(Draft202012Validator(SCHEMA).iter_errors(parsed))
+    failures = list(Draft202012Validator(SCHEMA if schema is None else schema).iter_errors(parsed))
     result["validation"]["schema_valid"] = not failures
     # No values, names, or free-form validator messages in exported evidence.
     result["validation"]["failed_keywords"] = sorted({str(e.validator) for e in failures})
@@ -224,7 +257,10 @@ def analyze(reply: Reply) -> tuple[dict, str | None]:
 
 
 def probe(client: Client, request: dict) -> dict:
-    result, generation_id = analyze(client.send("/chat/completions", request))
+    started_at = datetime.now(timezone.utc).isoformat()
+    result, generation_id = analyze(client.send("/chat/completions", request),
+                                    request["response_format"]["json_schema"]["schema"])
+    result["started_at"] = started_at
     result["require_parameters"] = request["provider"]["require_parameters"]
     if result["routing"]["provider"] or not generation_id:
         result["metadata_lookup"] = "not_needed" if result["routing"]["provider"] else "no_generation_id"
@@ -235,6 +271,8 @@ def probe(client: Client, request: dict) -> dict:
         try:
             body = strict_json(metadata.body)
             data = body.get("data") if isinstance(body, dict) else None
+            if isinstance(data, dict) and numeric(data.get("total_cost")):
+                result.setdefault("usage", {})["total_cost_usd"] = data["total_cost"]
             if isinstance(data, dict) and label(data.get("provider_name")):
                 result["routing"]["provider"] = label(data["provider_name"])
                 result["routing"]["source"] = "generation.data.provider_name"

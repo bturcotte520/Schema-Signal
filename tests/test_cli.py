@@ -85,6 +85,85 @@ class CLITests(unittest.TestCase):
         self.assertNotIn("--retry", script)
         self.assertNotIn("--location", script)
 
+    def custom_args(self, schema='{"type":"integer","minimum":2}', prompt="Return a synthetic integer"):
+        prompt_path = Path(self.temp.name) / "prompt.txt"
+        schema_path = Path(self.temp.name) / "schema.json"
+        prompt_path.write_text(prompt, encoding="utf-8")
+        schema_path.write_text(schema, encoding="utf-8")
+        return ["--prompt-file", str(prompt_path), "--schema-file", str(schema_path),
+                "--acknowledge-private-inputs", "--out", str(self.output)]
+
+    def test_custom_live_validation_and_privacy(self):
+        key = "fake-custom-test-key"
+        args = self.custom_args('{"type":"integer","description":"PRIVATE_SCHEMA"}',
+                                f"PRIVATE_CUSTOMER {key} sk-or-fake-token Bearer fake-bearer")
+        body = json.dumps({"provider": "Test provider", "choices": [{"message": {"content": '3'}}]}).encode()
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": key}), patch("schema_signal.core.Client.send", return_value=Reply(200, body, 42)) as send:
+            self.assertEqual(main(["--live", *args]), 0)
+            self.assertEqual(send.call_count, 2)
+            self.assertIn("PRIVATE_CUSTOMER", send.call_args.args[1]["messages"][0]["content"])
+        report = self.report()
+        self.assertTrue(report["review_required_before_sharing"])
+        self.assertEqual([r["status"] for r in report["results"]], ["valid", "valid"])
+        for path in self.output.iterdir():
+            text = path.read_text()
+            for secret in (key, "sk-or-fake-token", "fake-bearer"):
+                self.assertNotIn(secret, text)
+            if path.name.startswith("report"):
+                self.assertNotIn("PRIVATE_CUSTOMER", text)
+                self.assertNotIn("PRIVATE_SCHEMA", text)
+        request_text = (self.output / "request-off.json").read_text()
+        self.assertIn("PRIVATE_CUSTOMER", request_text)
+        self.assertIn("PRIVATE_SCHEMA", request_text)
+        self.assertIn("scrubbing is not anonymization", self.stdout.getvalue())
+
+    def test_custom_requires_privacy_acknowledgment(self):
+        args = self.custom_args()
+        args.remove("--acknowledge-private-inputs")
+        self.assertEqual(main(args), 2)
+        self.assertFalse(self.output.exists())
+
+    def test_custom_files_must_be_paired(self):
+        self.assertEqual(main(["--prompt-file", "missing", "--out", str(self.output)]), 2)
+        self.assertIn("both", self.stderr.getvalue())
+
+    def test_custom_demo_rejected(self):
+        self.assertEqual(main(["--demo", *self.custom_args()]), 2)
+        self.assertFalse(self.output.exists())
+
+    def test_invalid_custom_inputs_rejected_before_network_or_output(self):
+        schemas = ['{', '{"type":"PRIVATE_INVALID_TYPE"}', '[]',
+                   '{"type":"integer","minimum":NaN}', '{"type":"integer","minimum":1e999}',
+                   '{"type":"integer","type":"string"}',
+                   '{"$ref":"https://example.invalid/private"}',
+                   '{"$defs":{"x":{"$dynamicRef":"#x"}}}',
+                   '{"$schema":"http://json-schema.org/draft-07/schema#"}',
+                   '{"pattern":"["}']
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "fake-test-key"}), patch("schema_signal.core.Client.send") as send:
+            for schema in schemas:
+                with self.subTest(schema=schema):
+                    self.assertEqual(main(["--live", *self.custom_args(schema)]), 2)
+                    self.assertFalse(self.output.exists())
+            send.assert_not_called()
+        self.assertNotIn("PRIVATE_INVALID_TYPE", self.stderr.getvalue())
+
+    def test_empty_oversized_missing_and_non_utf8_inputs(self):
+        for prompt in ("  \n", "x" * 65537):
+            self.assertEqual(main(self.custom_args(prompt=prompt)), 2)
+        args = self.custom_args()
+        Path(args[1]).write_bytes(b"\xff")
+        self.assertEqual(main(args), 2)
+        Path(args[1]).unlink()
+        self.assertEqual(main(args), 2)
+        self.assertFalse(self.output.exists())
+
+    def test_offline_exports_scrub_environment_key_too(self):
+        key = "offline-fake-key"
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": key}):
+            self.assertEqual(main(self.custom_args(prompt=key)), 0)
+        for path in self.output.iterdir():
+            self.assertNotIn(key, path.read_text())
+
 
 if __name__ == "__main__":
     unittest.main()
