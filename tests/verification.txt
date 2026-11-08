@@ -1,0 +1,42 @@
+test_auth_or_rate_limit_stops_second_generation (test_cli.CLITests.test_auth_or_rate_limit_stops_second_generation) ... ok
+test_default_is_dry_run_no_network (test_cli.CLITests.test_default_is_dry_run_no_network) ... ok
+test_demo_no_key_no_network (test_cli.CLITests.test_demo_no_key_no_network) ... ok
+test_existing_directory_never_overwritten (test_cli.CLITests.test_existing_directory_never_overwritten) ... ok
+test_live_requires_key (test_cli.CLITests.test_live_requires_key) ... ok
+test_live_two_posts_and_secret_absent (test_cli.CLITests.test_live_two_posts_and_secret_absent) ... ok
+test_model_argument_rejects_shell_injection (test_cli.CLITests.test_model_argument_rejects_shell_injection) ... ok
+test_repro_uses_env_key_not_embedded_key (test_cli.CLITests.test_repro_uses_env_key_not_embedded_key) ... ok
+test_additional_and_missing_fields (test_core.AnalyzeTests.test_additional_and_missing_fields) ... ok
+test_api_errors_never_export_raw (test_core.AnalyzeTests.test_api_errors_never_export_raw) ... ok
+test_bad_json_success (test_core.AnalyzeTests.test_bad_json_success) ... ok
+test_boolean_is_not_integer (test_core.AnalyzeTests.test_boolean_is_not_integer) ... ok
+test_content_filter (test_core.AnalyzeTests.test_content_filter) ... ok
+test_generation_id_is_not_in_result (test_core.AnalyzeTests.test_generation_id_is_not_in_result) ... ok
+test_http_error_non_json (test_core.AnalyzeTests.test_http_error_non_json) ... ok
+test_invalid_json_not_repaired (test_core.AnalyzeTests.test_invalid_json_not_repaired) ... ok
+test_malformed_id_not_used (test_core.AnalyzeTests.test_malformed_id_not_used) ... ok
+test_malformed_response_shapes (test_core.AnalyzeTests.test_malformed_response_shapes) ... ok
+test_missing_content (test_core.AnalyzeTests.test_missing_content) ... ok
+test_refusal (test_core.AnalyzeTests.test_refusal) ... ok
+test_requests_differ_only_in_flag (test_core.AnalyzeTests.test_requests_differ_only_in_flag) ... ok
+test_requests_do_not_share_mutable_schema (test_core.AnalyzeTests.test_requests_do_not_share_mutable_schema) ... ok
+test_schema_wrong_type (test_core.AnalyzeTests.test_schema_wrong_type) ... ok
+test_scrub_recurses (test_core.AnalyzeTests.test_scrub_recurses) ... ok
+test_transport_failure (test_core.AnalyzeTests.test_transport_failure) ... ok
+test_truncation_even_if_json_valid (test_core.AnalyzeTests.test_truncation_even_if_json_valid) ... ok
+test_usage_is_allowlisted (test_core.AnalyzeTests.test_usage_is_allowlisted) ... ok
+test_valid (test_core.AnalyzeTests.test_valid) ... ok
+test_arbitrary_urls_disallowed (test_core.HTTPTests.test_arbitrary_urls_disallowed) ... ok
+test_http_error_is_read (test_core.HTTPTests.test_http_error_is_read) ... ok
+test_redirects_disabled (test_core.HTTPTests.test_redirects_disabled) ... ok
+test_request_headers_url_timeout_and_no_retries (test_core.HTTPTests.test_request_headers_url_timeout_and_no_retries) ... ok
+test_response_size_limit (test_core.HTTPTests.test_response_size_limit) ... ok
+test_timeout_no_retry (test_core.HTTPTests.test_timeout_no_retry) ... ok
+test_generation_metadata_fallback (test_core.ProbeTests.test_generation_metadata_fallback) ... ok
+test_provider_returned_no_lookup (test_core.ProbeTests.test_provider_returned_no_lookup) ... ok
+test_unavailable_metadata_keeps_unknown (test_core.ProbeTests.test_unavailable_metadata_keeps_unknown) ... ok
+
+----------------------------------------------------------------------
+Ran 37 tests in 0.037s
+
+OK

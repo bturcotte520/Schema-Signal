@@ -1,0 +1,39 @@
+{
+  "model": "openai/gpt-4o-mini",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Extract the purchase from this synthetic sentence: \"I bought 3 blue notebooks.\" Return only a JSON object with item (string) and quantity (integer)."
+    }
+  ],
+  "max_tokens": 256,
+  "stream": false,
+  "provider": {
+    "require_parameters": false
+  },
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "purchase",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "Name of the purchased item"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "Number of items purchased"
+          }
+        },
+        "required": [
+          "item",
+          "quantity"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

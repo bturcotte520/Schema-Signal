@@ -1,0 +1,62 @@
+{
+  "tool_version": "0.1.0",
+  "mode": "DEMO: SIMULATED, NOT LIVE",
+  "created_at": "2026-11-07T17:56:04.115790+00:00",
+  "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+  "requested_model": "openai/gpt-4o-mini",
+  "provider_pin": null,
+  "results": [
+    {
+      "http_status": 200,
+      "elapsed_ms": 0,
+      "status": "schema_mismatch",
+      "routing": {
+        "provider": "Fictional fixture provider",
+        "source": "chat_response.provider",
+        "model": "demo/model-not-live"
+      },
+      "validation": {
+        "json_valid": true,
+        "schema_valid": false,
+        "failed_keywords": [
+          "type"
+        ]
+      },
+      "generation_id_available": false,
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0
+      },
+      "finish_reason": "stop",
+      "content_bytes": 40,
+      "require_parameters": false,
+      "metadata_lookup": "not_needed"
+    },
+    {
+      "http_status": 200,
+      "elapsed_ms": 0,
+      "status": "valid",
+      "routing": {
+        "provider": "Fictional fixture provider",
+        "source": "chat_response.provider",
+        "model": "demo/model-not-live"
+      },
+      "validation": {
+        "json_valid": true,
+        "schema_valid": true,
+        "failed_keywords": []
+      },
+      "generation_id_available": false,
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0
+      },
+      "finish_reason": "stop",
+      "content_bytes": 38,
+      "require_parameters": true,
+      "metadata_lookup": "not_needed"
+    }
+  ]
+}
